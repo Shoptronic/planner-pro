@@ -1,0 +1,1378 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Tareas | Equipo 3</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #0052CC; --bg: #F4F5F7; --sidebar: #0747A6;
+            --todo: #DFE1E6; --doing: #DEEBFF; --rev: #FFF0B3; --done: #E3FCEF;
+            --text: #172B4D; --border: #EBECF0; --danger: #de350b;
+            --warning: #FFAB00;
+            --p-baja: #4C9AFF; --p-media: #36B37E; --p-alta: #FF8B00; --p-critica: #EB5A46;
+        }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); margin: 0; display: flex; height: 100vh; color: var(--text); overflow: hidden; }
+        
+        .sidebar { width: 280px; background: var(--sidebar); color: white; display: flex; flex-direction: column; padding: 20px; flex-shrink: 0; overflow-y: auto; transition: all 0.3s ease; position: relative; }
+        .sidebar.hidden { width: 0; padding: 0; margin-left: -20px; overflow: hidden; }
+
+        .toggle-btn { position: fixed; left: 20px; bottom: 20px; background: var(--sidebar); color: white; border: none; width: 45px; height: 45px; border-radius: 50%; cursor: pointer; z-index: 2000; box-shadow: 0 4px 10px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; font-size: 1.2rem; transition: 0.3s; }
+        .toggle-btn:hover { transform: scale(1.1); background: var(--primary); }
+
+        .logo { font-weight: 800; font-size: 1.3rem; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 15px; text-align: center; white-space: nowrap; }
+        
+        .calendar-container { background: rgba(255,255,255,0.1); border-radius: 8px; padding: 10px; margin-bottom: 20px; font-size: 0.8rem; min-width: 240px; }
+        .cal-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .cal-btn { cursor: pointer; padding: 2px 8px; border-radius: 4px; transition: 0.2s; }
+        .cal-btn:hover { background: rgba(255,255,255,0.2); }
+        .cal-header { font-weight: bold; text-transform: uppercase; color: #fff; }
+        .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; }
+        .cal-day-name { font-weight: bold; color: #deebff; font-size: 0.6rem; margin-bottom: 4px; }
+        .cal-day { padding: 4px 0; border-radius: 4px; color: #fff; font-size: 0.75rem; }.cal-today { background: #eb2027 !important; color: white !important; font-weight: bold; border-radius: 50%; }
+        .cal-today { border: 1px solid white; font-weight: bold; }
+        .cal-has-task { background: var(--warning); color: #172B4D; font-weight: bold; }
+        
+        @keyframes blink-red {
+            0% { background: rgba(222, 53, 11, 0.4); }
+            50% { background: #de350b; box-shadow: 0 0 8px #de350b; color: white; }
+            100% { background: rgba(222, 53, 11, 0.4); }
+        }
+
+        .nav-item { padding: 10px 15px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 10px; margin-bottom: 5px; transition: 0.2s; color: #deebff; font-size: 0.9rem; white-space: nowrap; }
+        .nav-item:hover { background: rgba(255,255,255,0.1); color: white; }
+
+        .main { flex: 1; display: flex; flex-direction: column; height: 100vh; min-width: 0; transition: 0.3s; position: relative; }
+        header { background: white; padding: 20px 40px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+
+        .kpi-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; padding: 20px 40px; background: white; flex-shrink: 0; }
+        .kpi-card { padding: 15px; border-radius: 8px; border: 1px solid var(--border); background: #fff; }
+        
+        .kpi-blocked-btn { cursor: pointer; transition: all 0.3s ease; border: 2px solid #ffccc7; background: #fff1f0; position: relative; }
+        .kpi-blocked-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(222, 53, 11, 0.15); border-color: var(--danger); }
+        .kpi-blocked-btn.active-filter { background: var(--danger) !important; border-color: #a82a08 !important; }
+        .kpi-blocked-btn.active-filter .kpi-label, .kpi-blocked-btn.active-filter .kpi-number { color: white !important; }
+        
+        .kpi-label { font-size: 0.7rem; color: #6B778C; font-weight: 800; text-transform: uppercase; }
+        .kpi-number { font-size: 1.6rem; font-weight: 700; display: block; color: var(--primary); margin-top: 4px; }
+
+        .board { flex: 1; display: flex; gap: 15px; padding: 20px 40px; overflow-x: auto; align-items: stretch; }
+        .column { flex: 1; min-width: 250px; background: #EBECF0; border-radius: 8px; display: flex; flex-direction: column; max-height: 100%; border: 2px dashed transparent; }
+        .column.drag-over { border-color: var(--primary); background: #DFE1E6; }
+        
+        .col-header { padding: 15px; font-weight: 800; color: #5E6C84; display: flex; justify-content: space-between; align-items: center; text-transform: uppercase; font-size: 0.8rem; flex-shrink: 0; }
+        .col-title-box { display: flex; align-items: center; gap: 8px; }
+        .sort-indicator { font-size: 0.6rem; background: #DFE1E6; padding: 2px 8px; border-radius: 10px; color: #5E6C84; margin-left: 8px; font-weight: bold; border: 1px solid #C1C7D0; }
+        .btn-sort { background: none; border: none; color: #A5ADBA; cursor: pointer; font-size: 0.95rem; transition: 0.2s; padding: 6px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+        .btn-sort:hover { color: var(--primary); background: rgba(0, 82, 204, 0.1); }
+        .btn-sort.active { color: var(--primary); background: rgba(0, 82, 204, 0.15); }
+
+        .task-list { padding: 0 12px 12px 12px; overflow-y: auto; flex: 1; min-height: 50px; }
+
+        .card { background: white; border-radius: 6px; padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.08); cursor: grab; border-left: 6px solid #ccc; position: relative; transition: 0.2s; }
+        .card-todo { border-left-color: #6B778C; background: #fdfdfd; }
+        .card-doing { border-left-color: #0052CC; background: var(--doing); }
+        .card-rev { border-left-color: #FFAB00; background: var(--rev); }
+        .card-done { border-left-color: #36B37E; background: var(--done); }
+
+        .card-title { font-weight: 700; font-size: 0.95rem; margin-bottom: 5px; color: #172B4D; display: flex; align-items: center; gap: 8px; }
+        .card-desc { font-size: 0.75rem; color: #444; margin-bottom: 10px; font-style: italic; display: block; }
+        .card-info { font-size: 0.75rem; color: #5E6C84; display: flex; flex-direction: column; gap: 4px; }
+        
+        .priority-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+        .btn-delete-task { position: absolute; top: 12px; right: 12px; color: #ccc; cursor: pointer; z-index: 10; }
+        .btn-delete-task:hover { color: var(--danger); }
+        .days-label { font-weight: bold; padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; display: inline-block; width: fit-content; }
+        
+        .modal { display: none; position: fixed; inset: 0; background: rgba(9, 30, 66, 0.7); z-index: 3000; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+        .modal-content { background: white; width: 90%; max-width: 600px; border-radius: 12px; padding: 30px; max-height: 90vh; overflow-y: auto; }
+        
+        input, select, textarea { padding: 10px; border: 2px solid var(--border); border-radius: 6px; width: 100%; box-sizing: border-box; margin-top: 5px; font-family: inherit; }
+        .btn { padding: 10px 20px; border-radius: 6px; font-weight: 700; cursor: pointer; border: none; }
+        .btn-primary { background: var(--primary); color: white; }
+
+        .history-box { font-size: 0.7rem; background: #f8f9fa; padding: 10px; border-radius: 6px; max-height: 80px; overflow-y: auto; margin-top: 5px; border: 1px solid var(--border); color: #444; }
+        .history-item { margin-bottom: 4px; border-bottom: 1px solid #eee; }
+
+        #filter-info { position: absolute; top: 85px; right: 40px; background: var(--danger); color: white; padding: 5px 12px; border-radius: 20px; font-size: 0.7rem; font-weight: bold; display: none; z-index: 100; align-items: center; gap: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); cursor: pointer; }
+
+        footer { padding: 10px 40px; background: white; border-top: 1px solid var(--border); font-size: 0.75rem; text-align: center; color: #6B778C; }
+        .sidebar-section-title { font-size: 0.65rem; color: rgba(255,255,255,0.5); font-weight: 800; text-transform: uppercase; margin: 15px 0 5px 5px; letter-spacing: 1px; }
+/* --- MEJORAS DE INTERACTIVIDAD --- */
+.cal-day { cursor: pointer; transition: 0.2s; }
+.cal-day:hover { background: rgba(255,255,255,0.3); transform: scale(1.1); }
+.cal-selected-day { outline: 2px solid white; outline-offset: -2px; box-shadow: 0 0 8px rgba(255,255,255,0.5); }
+
+#clear-date-filter { 
+    position: absolute; top: 85px; right: 40px; 
+    background: var(--primary); color: white; 
+    padding: 5px 12px; border-radius: 20px; 
+    font-size: 0.7rem; font-weight: bold; 
+    display: none; align-items: center; gap: 8px; 
+    z-index: 101; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+/* --- ESTILOS DE USUARIO Y AJUSTES --- */
+.user-profile { position: relative; display: flex; align-items: center; gap: 12px; cursor: pointer; }
+.avatar { width: 35px; height: 35px; background: var(--primary); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 2px solid var(--border); transition: 0.3s; }
+.user-profile:hover .avatar { transform: scale(1.1); box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+
+.settings-dropdown { 
+    position: absolute; top: 100%; right: 0; background: white; min-width: 200px; 
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1); border-radius: 8px; border: 1px solid var(--border); 
+    display: none; flex-direction: column; z-index: 2001; margin-top: 10px; 
+}
+.settings-dropdown.active { display: flex; }
+.dropdown-item { padding: 12px 15px; font-size: 0.85rem; color: var(--text); display: flex; align-items: center; gap: 10px; transition: 0.2s; }
+.dropdown-item:hover { background: var(--bg); color: var(--primary); }
+/* --- ESTILOS DE BLOQUEO DE SEGURIDAD --- */
+#lock-screen {
+    position: fixed; inset: 0; background: rgba(9, 30, 66, 0.8);
+    backdrop-filter: blur(15px); z-index: 9999;
+    display: none; align-items: center; justify-content: center; color: white;
+}
+.lock-box {
+    background: white; padding: 40px; border-radius: 12px; text-align: center;
+    color: var(--text); box-shadow: 0 20px 50px rgba(0,0,0,0.3); width: 300px;
+}
+.lock-box i { font-size: 3rem; color: var(--primary); margin-bottom: 20px; }
+.lock-box input { 
+    font-size: 1.5rem; text-align: center; letter-spacing: 5px; 
+    margin: 20px 0; border: 2px solid var(--border); 
+}    
+/* --- ESTILO ZONA DE PELIGRO --- */
+.dropdown-item.danger-zone {
+    border-top: 1px solid #ffccc7;
+    background-color: #fff1f0;
+    color: #ff4d4f;
+    font-weight: bold;
+    margin-top: 5px;
+    border-radius: 0 0 8px 8px;
+}
+.dropdown-item.danger-zone:hover {
+    background-color: #ff4d4f;
+    color: white;
+}
+/* --- ESTILOS DE LA PAPELERA --- */
+.trash-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px; border-bottom: 1px solid var(--border); background: #fff; margin-bottom: 5px; border-radius: 4px;
+}
+.trash-info { display: flex; flex-direction: column; gap: 2px; }
+.trash-actions { display: flex; gap: 10px; }
+.btn-restore { color: var(--primary); cursor: pointer; font-size: 1.1rem; }
+.btn-purge { color: var(--danger); cursor: pointer; font-size: 1.1rem; }
+
+/* Indicador de papelera vacía */
+.empty-trash { text-align: center; padding: 20px; color: #6B778C; font-style: italic; }
+/* --- ESTILOS DE LA LÍNEA DE TIEMPO (TIMELINE) --- */
+.timeline-container {
+    display: flex; flex-direction: column; gap: 8px;
+    padding: 15px; background: #f4f5f7; border-radius: 8px;
+    max-height: 500px; overflow-y: auto;
+}
+.timeline-row {
+    display: flex; align-items: center; background: white;
+    padding: 10px; border-radius: 6px; border: 1px solid var(--border);
+    transition: 0.2s;
+}
+.timeline-row:hover { transform: translateX(5px); border-color: var(--primary); }
+.timeline-date-label {
+    width: 90px; font-size: 0.7rem; font-weight: 800; color: var(--sidebar);
+    background: #ebecf0; padding: 4px 8px; border-radius: 4px; text-align: center;
+}
+.timeline-task-info {
+    flex: 1; margin-left: 15px; display: flex; flex-direction: column;
+}
+.timeline-bar-bg {
+    height: 8px; background: #eee; border-radius: 4px; margin-top: 6px; width: 100%; position: relative;
+}
+.timeline-bar-fill {
+    height: 100%; border-radius: 4px; transition: width 0.5s ease-out;
+}
+/* --- ESTILO AVATAR PERSONALIZADO --- */
+.avatar { 
+    position: relative; overflow: hidden; background-size: cover; background-position: center; 
+}
+.avatar-overlay {
+    position: absolute; inset: 0; background: rgba(0,0,0,0.4); 
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; transition: 0.3s; color: white; font-size: 0.8rem;
+}
+.avatar:hover .avatar-overlay { opacity: 1; }
+/* --- ESTILO CONTADOR DE DÍAS --- */
+.days-left-tag {
+    font-size: 0.65rem;
+    font-weight: bold;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 10px;
+}
+.days-urgent { background: #ffebe6; color: #bf2600; } /* Menos de 3 días */
+.days-normal { background: #e3fcef; color: #006644; } /* Más de 3 días */
+.days-late { background: #253858; color: white; }    /* Tarea vencida */
+/* --- BOTÓN DE AYUDA FLOTANTE --- */
+.help-btn {
+    position: fixed; bottom: 20px; right: 20px;
+    width: 50px; height: 50px; background: var(--primary);
+    color: white; border-radius: 50%; display: flex;
+    align-items: center; justify-content: center;
+    font-size: 1.5rem; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    z-index: 999; transition: 0.3s;
+}
+.help-btn:hover { transform: scale(1.1); background: #0052cc; }
+
+/* --- CONTENIDO DE LA AYUDA --- */
+.help-section { margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+.help-section h4 { color: var(--primary); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+.help-section p { font-size: 0.9rem; color: #444; line-height: 1.4; }
+.help-list { margin-left: 20px; font-size: 0.85rem; color: #555; }
+.help-list li { margin-bottom: 5px; }
+/* --- SISTEMA DE NOTIFICACIONES (TOASTS) --- */
+#toast-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.toast {
+    min-width: 250px;
+    padding: 12px 20px;
+    background: #333;
+    color: white;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    animation: slideInRight 0.3s ease-out forwards;
+    border-left: 4px solid var(--primary);
+}
+.toast.success { border-left-color: #36B37E; }
+.toast.warning { border-left-color: #FF8B00; }
+.toast.danger { border-left-color: #EB5A46; }
+
+@keyframes slideInRight {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+.toast.fade-out {
+    animation: fadeOut 0.5s ease-out forwards;
+}
+@keyframes fadeOut {
+    to { opacity: 0; transform: translateY(-10px); }
+}
+/* --- BARRA DE ENFOQUE (FILTRO USUARIOS) --- */
+.focus-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 20px;
+    background: #f4f5f7;
+    border-bottom: 1px solid #ddd;
+    overflow-x: auto;
+}
+.focus-title {
+    font-size: 0.75rem;
+    font-weight: bold;
+    color: #5e6c84;
+    text-transform: uppercase;
+    margin-right: 10px;
+    white-space: nowrap;
+}
+.user-filter-btn {
+    padding: 5px 12px;
+    background: white;
+    border: 1px solid #dfe1e6;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: 0.2s;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+.user-filter-btn:hover { background: #ebecf0; }
+.user-filter-btn.active {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+/* Efecto para ocultar tareas que no coinciden */
+.task-card.filtered-out {
+    display: none;
+}
+/* Este código fuerza a que la tarjeta desaparezca si el filtro lo ordena */
+.task-card[style*="display: none"] {
+    display: none !important;
+}
+
+/* Opcional: añade un efecto visual para que las que se quedan se vean mejor */
+.task-card {
+    transition: opacity 0.3s ease;
+}
+</style>
+</head>
+<body>
+<div id="lock-screen">
+    <div class="lock-box">
+        <i class="fas fa-lock"></i>
+        <h2 style="margin:0">Acceso Protegido</h2>
+        <p style="font-size: 0.8rem; color: #6B778C;">Introduce la contraseña para entrar</p>
+        <input type="password" id="lock-pass" placeholder="****" maxlength="4">
+        <button class="btn btn-primary" style="width:100%" onclick="unlockApp()">Acceder</button>
+    </div>
+</div>
+
+    <button class="toggle-btn" onclick="toggleSidebar()"><i class="fas fa-bars" id="toggleIcon"></i></button>
+
+    <div class="sidebar" id="sidebar">
+        <div class="logo" id="main-project-title" onclick="editProjectName()" style="cursor: pointer;">
+    <i class="fas fa-layer-group"></i> 
+    <span id="project-name-content">
+        <span style="color: #eb2027;">Eq3.:</span> Planner PRO
+    </span>
+</div>
+        <div class="calendar-container">
+            <div class="cal-header-row">
+                <div class="cal-btn" onclick="changeMonth(-1)"><i class="fas fa-chevron-left"></i></div>
+                <div class="cal-header" id="calMonth"></div>
+                <div class="cal-btn" onclick="changeMonth(1)"><i class="fas fa-chevron-right"></i></div>
+            </div>
+            <div class="cal-grid" id="calGrid"></div>
+        </div>
+        
+        <div class="nav-item" onclick="location.reload()"><i class="fas fa-sync"></i> Actualizar</div>
+        <div class="nav-item" onclick="openDataModal()"><i class="fas fa-server"></i> Centro de Datos</div>
+        
+        <div class="sidebar-section-title">Copias de Seguridad</div>
+        <div class="nav-item" onclick="exportBackup()"><i class="fas fa-download"></i> Exportar Datos (.json)</div>
+        <div class="nav-item" style="position:relative; cursor:pointer;">
+            <i class="fas fa-upload"></i> Importar Copia
+            <input type="file" id="importFile" onchange="importBackup(event)" style="position:absolute; inset:0; opacity:0; cursor:pointer;">
+        </div>
+
+        <div style="margin-top:20px; background:white; border-radius:12px; padding:10px; text-align:center;">
+            <p style="color:var(--text); font-size:0.7rem; font-weight:800; margin:0 0 10px 0; text-transform:uppercase;">Balance de Estados</p>
+            <canvas id="mainChart" style="max-height: 180px;"></canvas>
+        </div>
+        <button class="btn btn-primary" style="margin-top:20px; width:100%" onclick="exportPDF()">Reporte Detallado PDF</button>
+    </div>
+
+    <div class="main">
+        <div id="filter-info" onclick="clearBlockedFilter()">
+            <i class="fas fa-filter"></i> VIENDO BLOQUEOS EXTERNOS <i class="fas fa-times-circle"></i>
+        </div>
+<div id="clear-date-filter" onclick="resetDateFilter()">
+    <i class="fas fa-calendar-times"></i> FILTRO FECHA ACTIVO <i class="fas fa-times-circle"></i>
+</div>
+
+        <header>
+            <div style="width: 45px;"></div> 
+<input type="text" id="search" placeholder="🔍 Buscar tarea..." oninput="render()" style="width:300px;">
+<div style="display: flex; align-items: center; gap: 20px;">
+    <button class="btn btn-primary" onclick="openTaskModal()"><i class="fas fa-plus"></i> Nueva Tarea</button>
+    
+    <div class="user-profile" onclick="toggleSettings()">
+        <span id="admin-name-display" style="font-size: 0.85rem; font-weight: 600; color: var(--text);">Administrador</span>
+        <div class="avatar" id="user-avatar" onclick="triggerAvatarUpload()">
+    <span id="avatar-initials">AD</span>
+    <div class="avatar-overlay"><i class="fas fa-camera"></i></div>
+</div>
+<input type="file" id="avatar-input" style="display:none;" accept="image/*" onchange="uploadAvatar(this)">
+        
+        <div class="settings-dropdown" id="settingsDropdown">
+    <div class="dropdown-item" onclick="openAdminSettings()"><i class="fas fa-user-cog"></i> Ajustes de Perfil</div>
+    <div class="dropdown-item" onclick="openDataModal()"><i class="fas fa-database"></i> Centro de Datos</div>
+<div class="dropdown-item" onclick="openTimelineModal()"><i class="fas fa-stream"></i> Línea de Tiempo</div>
+    <div class="dropdown-item" onclick="openTrashModal()"><i class="fas fa-trash-alt"></i> Papelera de Reciclaje</div>
+    <div class="dropdown-item" onclick="lockApp()"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</div>
+    <div class="dropdown-item danger-zone" onclick="dangerDeleteAll()">
+        <i class="fas fa-exclamation-triangle"></i> BORRAR TODO
+    </div>
+</div>
+    </div>
+</div>
+        </header>
+<div class="focus-bar">
+    <span class="focus-title"><i class="fas fa-filter"></i> Enfoque por Usuario:</span>
+    <div id="user-filters-list" style="display: flex; gap: 10px; flex-wrap: wrap;">
+        </div>
+</div>
+        <div class="kpi-row">
+            <div class="kpi-card"><span class="kpi-label">Pendientes</span><span class="kpi-number" id="k-todo">0</span></div>
+            <div class="kpi-card"><span class="kpi-label">En Curso</span><span class="kpi-number" id="k-doing" style="color:#0052CC">0</span></div>
+            <div class="kpi-card"><span class="kpi-label">Revisión</span><span class="kpi-number" id="k-rev" style="color:#FFAB00">0</span></div>
+            <div class="kpi-card"><span class="kpi-label">Finalizado</span><span class="kpi-number" id="k-done" style="color:#36B37E">0</span></div>
+            <div id="kpi-blocked-container" class="kpi-card kpi-blocked-btn" onclick="toggleBlockedFilter()">
+                <span class="kpi-label">Bloqueos Ext.</span>
+                <span class="kpi-number" id="k-blocked" style="color:#de350b">0</span>
+            </div>
+        </div>
+
+        <div class="board">
+            <div class="column" ondrop="drop(event, 'todo')" ondragover="allowDrop(event)" ondragenter="dragEnter(event)" ondragleave="dragLeave(event)">
+                <div class="col-header" id="h-todo"></div>
+                <div id="l-todo" class="task-list"></div>
+            </div>
+            <div class="column" ondrop="drop(event, 'doing')" ondragover="allowDrop(event)" ondragenter="dragEnter(event)" ondragleave="dragLeave(event)">
+                <div class="col-header" id="h-doing"></div>
+                <div id="l-doing" class="task-list"></div>
+            </div>
+            <div class="column" ondrop="drop(event, 'rev')" ondragover="allowDrop(event)" ondragenter="dragEnter(event)" ondragleave="dragLeave(event)">
+                <div class="col-header" id="h-rev"></div>
+                <div id="l-rev" class="task-list"></div>
+            </div>
+            <div class="column" ondrop="drop(event, 'done')" ondragover="allowDrop(event)" ondragenter="dragEnter(event)" ondragleave="dragLeave(event)">
+                <div class="col-header" id="h-done"></div>
+                <div id="l-done" class="task-list"></div>
+            </div>
+        </div>
+        <footer>© 2026 Beregu - Gestión Integral de Tareas</footer>
+    </div>
+
+    <div id="taskModal" class="modal">
+        <div class="modal-content">
+            <h3>Configuración de Tarea</h3>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px;">
+                <div style="grid-column: span 2;"><label>Título</label><input type="text" id="t-title"></div>
+                <div style="grid-column: span 2;"><label>Descripción</label><textarea id="t-desc" rows="2"></textarea></div>
+                <div><label>Vencimiento</label><input type="date" id="t-end"></div>
+                <div><label>Responsable</label><select id="t-user"></select></div>
+                <div><label>Prioridad</label>
+                    <select id="t-priority">
+                        <option value="baja">Baja</option>
+                        <option value="media" selected>Media</option>
+                        <option value="alta">Alta</option>
+                        <option value="critica">Crítica</option>
+                    </select>
+                </div>
+                <div><label>Equipo Externo</label><select id="t-dep-team"></select></div>
+                <div><label>Adjuntar Fichero</label><input type="file" id="t-file" style="font-size: 0.8rem;"></div>
+                <div><label>A la espera de (Tarea)</label><select id="t-dep-task"></select></div>
+                <div style="grid-column: span 2;">
+                    <label>Notas / Historial</label>
+                    <div id="t-history" class="history-box"></div>
+                    <div style="display:flex; gap:5px; margin-top:5px;">
+                        <input type="text" id="t-new-comment" placeholder="Escribir nota..." style="margin-top:0">
+                        <button class="btn btn-primary" style="padding:5px 10px" onclick="addComment()">+</button>
+                    </div>
+                </div>
+            </div>
+            <div style="margin-top:20px; text-align:right;">
+                <button class="btn" style="background:#eee" onclick="closeModals()">Cancelar</button>
+                <button class="btn btn-primary" onclick="saveTask()">Guardar Tarea</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="dataModal" class="modal">
+        <div class="modal-content" style="max-width:450px">
+            <h3>Centro de Datos</h3>
+            <div class="admin-section">
+                <h4>Gestionar Equipo</h4>
+                <div id="admin-user-list"></div>
+                <div style="display:flex; gap:5px; margin-top:10px"><input type="text" id="new-u" placeholder="Nombre..."><button class="btn btn-primary" onclick="addUser()">+</button></div>
+            </div>
+            <div class="admin-section">
+                <h4>Equipos Externos</h4>
+                <div id="admin-dep-list"></div>
+                <div style="display:flex; gap:5px; margin-top:10px"><input type="text" id="new-d" placeholder="Ej: IT..."><button class="btn btn-primary" onclick="addDepType()">+</button></div>
+            </div>
+            <button class="btn btn-primary" style="width:100%; margin-top:10px" onclick="closeModals()">Cerrar</button>
+        </div>
+    </div>
+<div id="trashModal" class="modal">
+    <div class="modal-content" style="max-width: 500px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h3 style="margin:0"><i class="fas fa-trash-alt"></i> Papelera de Reciclaje</h3>
+            <button class="btn" style="background: var(--danger); color:white; font-size: 0.7rem;" onclick="emptyTrash()">Vaciar todo</button>
+        </div>
+        <div id="trash-list" style="max-height: 400px; overflow-y: auto;">
+            </div>
+        <div style="margin-top: 20px; text-align: right;">
+            <button class="btn btn-primary" onclick="closeModals()">Cerrar</button>
+        </div>
+    </div>
+</div>
+<div id="timelineModal" class="modal">
+        <div class="modal-content" style="max-width: 700px; width: 90%;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h3 style="margin:0; color: var(--sidebar);"><i class="fas fa-stream"></i> Cronograma de Entregas</h3>
+                <button class="btn" style="background: #eee;" onclick="closeModals()">Cerrar</button>
+            </div>
+            <div id="timeline-content" class="timeline-container">
+                </div>
+            <p style="font-size: 0.65rem; color: #6B778C; margin-top: 15px;">* Las tareas se ordenan automáticamente por fecha de vencimiento.</p>
+        </div>
+    </div>
+<div class="help-btn" onclick="openHelpModal()" title="Guía de ayuda">
+    <i class="fas fa-question"></i>
+</div>
+
+<div id="helpModal" class="modal">
+    <div class="modal-content" style="max-width: 700px; width: 95%; max-height: 85vh; overflow-y: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 2px solid var(--primary); padding-bottom: 10px;">
+            <h3 style="margin:0; color: var(--sidebar);"><i class="fas fa-info-circle"></i> Centro de Ayuda - Eq3. Planner PRO</h3>
+            <button class="btn" style="background: #eee;" onclick="closeModals()">Cerrar</button>
+        </div>
+
+        <div class="help-section">
+            <h4><i class="fas fa-bars"></i> Interfaz y Navegación</h4>
+            <p><strong>Ocultar Menú Lateral:</strong> Puedes colapsar el menú de la izquierda pulsando el icono de las "tres rayas" (hamburguesa) en la esquina superior izquierda. Esto te da más espacio para ver el tablero.</p>
+            <p><strong>Calendario Inteligente:</strong> El calendario muestra puntos en los días con tareas. Si pulsas sobre un día con puntos, el tablero se filtrará automáticamente para mostrarte solo las tareas que vencen ese día.</p>
+        </div>
+
+        <div class="help-section">
+            <h4><i class="fas fa-filter"></i> Búsqueda y Filtros</h4>
+            <p>En la parte superior dispones de herramientas de búsqueda rápida:</p>
+            <ul class="help-list">
+                <li><strong>Buscador:</strong> Escribe cualquier palabra para filtrar por título o descripción.</li>
+                <li><strong>Prioridad/Usuario:</strong> Filtra el tablero para ver solo lo más urgente o las tareas de un miembro específico.</li>
+            </ul>
+        </div>
+
+        <div class="help-section">
+            <h4><i class="fas fa-edit"></i> Gestión de Tarjetas</h4>
+            <ul class="help-list">
+                <li><strong>Añadir:</strong> Pulsa el botón <strong>"+"</strong> al final de cualquier columna.</li>
+                <li><strong>Modificar:</strong> Haz clic en una tarjeta. Puedes cambiar el estado, asignar usuarios o adjuntar archivos.</li>
+                <li><strong>Mover:</strong> Arrastra las tarjetas entre columnas (To Do, In Progress, Done) para actualizar su progreso.</li>
+            </ul>
+        </div>
+
+        <div class="help-section">
+            <h4><i class="fas fa-tools"></i> Herramientas de Perfil (Avatar)</h4>
+            <p>Al hacer clic en tu foto o iniciales arriba a la derecha, accedes a:</p>
+            <ul class="help-list">
+                <li><strong>Línea de Tiempo:</strong> Vista cronológica con cuenta atrás de días restantes.</li>
+                <li><strong>Papelera:</strong> Recupera tareas borradas por error.</li>
+                <li><strong>Centro de Datos:</strong> Importa o exporta tu base de datos mediante códigos de respaldo.</li>
+            </ul>
+        </div>
+
+        <div class="help-section" style="background: #fff1f0; padding: 10px; border-radius: 8px; border: 1px solid #ffa39e;">
+            <h4 style="color: #cf1322;"><i class="fas fa-exclamation-triangle"></i> Borrado Total (Reset)</h4>
+            <p>Dentro del menú de ajustes existe una opción en rojo llamada <strong>"BORRAR TODO"</strong>. Úsala con precaución:</p>
+            <ul class="help-list">
+                <li>Elimina todas las tareas, usuarios y configuraciones permanentemente.</li>
+                <li>La aplicación se reiniciará a su estado de fábrica.</li>
+                <li>Requiere una <strong>doble confirmación</strong> para ejecutarse.</li>
+            </ul>
+        </div>
+        
+        <div style="text-align: center; margin-top: 20px;">
+            <button class="btn btn-primary" onclick="closeModals()">Entendido</button>
+        </div>
+    </div>
+</div>
+<div id="toast-container"></div>
+
+<script>
+        let db = JSON.parse(localStorage.getItem('beregu_apex_v9')) || { projectName: '<span style="color: #eb2027;">Eq3.:</span> Planner PRO', tasks: [], users: ["Admin", "Coordinador"], depTypes: ["IT", "Legal", "Compras"], adminName: "Administrador", trash: [], adminPhoto: null };
+        let columnSorts = { todo: 'none', doing: 'none', rev: 'none', done: 'none' };
+        let curId = null; let chart = null; let calDate = new Date();
+        let filterBlocked = false;
+let dateFilter = null; 
+
+function filterByDate(day, month, year) {
+    // Formateamos la fecha a YYYY-MM-DD para que coincida con el input date
+    dateFilter = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    document.getElementById('clear-date-filter').style.display = 'flex';
+    render();
+}
+
+function resetDateFilter() {
+    dateFilter = null;
+    document.getElementById('clear-date-filter').style.display = 'none';
+    render();
+}
+
+        function sync() { localStorage.setItem('beregu_apex_v9', JSON.stringify(db)); render(); }
+        function allowDrop(ev) { ev.preventDefault(); }
+        function drag(ev, id) { ev.dataTransfer.setData("text", id); }
+        function dragEnter(ev) { ev.currentTarget.classList.add('drag-over'); }
+        function dragLeave(ev) { ev.currentTarget.classList.remove('drag-over'); }
+        
+        function cycleSort(col) {
+            const flow = ['none', 'date', 'prio'];
+            let nextIdx = (flow.indexOf(columnSorts[col]) + 1) % flow.length;
+            columnSorts[col] = flow[nextIdx];
+            render();
+        }
+
+        function toggleBlockedFilter() {
+            filterBlocked = !filterBlocked;
+            const kpiBox = document.getElementById('kpi-blocked-container');
+            const info = document.getElementById('filter-info');
+            if(filterBlocked) { kpiBox.classList.add('active-filter'); info.style.display = 'flex'; } 
+            else { kpiBox.classList.remove('active-filter'); info.style.display = 'none'; }
+            render();
+        }
+
+        function clearBlockedFilter() {
+            filterBlocked = false;
+            document.getElementById('kpi-blocked-container').classList.remove('active-filter');
+            document.getElementById('filter-info').style.display = 'none';
+            render();
+        }
+
+        function drop(ev) {
+    ev.preventDefault();
+    const id = ev.dataTransfer.getData("text");
+    const task = db.tasks.find(t => t.id == id);
+    
+    // Aquí es donde el código identifica en qué columna has soltado la tarea
+    const newStatus = ev.currentTarget.getAttribute('data-status');
+    
+    if (task && newStatus) {
+        task.status = newStatus; // Actualiza el estado (todo, in-progress, done)
+        
+        // --- AQUÍ INSERTAMOS LA NOTIFICACIÓN ---
+        const nombresColumnas = {
+            'todo': 'Pendientes',
+            'in-progress': 'En Proceso',
+            'done': 'Finalizadas'
+        };
+        
+        sync(); // Guarda los cambios
+        
+        // Lanzamos el aviso visual
+        showToast(`Tarea movida a ${nombresColumnas[newStatus] || newStatus}`);
+    }
+}
+
+        function render() {
+            renderCalendar();
+            const q = document.getElementById('search').value.toLowerCase();
+            const prioColors = { baja: 'var(--p-baja)', media: 'var(--p-media)', alta: 'var(--p-alta)', critica: 'var(--p-critica)' };
+            const prioValue = { critica: 4, alta: 3, media: 2, baja: 1 };
+            const colNames = { todo: 'Pendientes', doing: 'En Curso', rev: 'Revisión', done: 'Finalizado' };
+
+            ['todo', 'doing', 'rev', 'done'].forEach(col => {
+                let list = db.tasks.filter(t => {
+                    const matchesStatus = t.status === col;
+                    const matchesSearch = t.title.toLowerCase().includes(q);
+                    const matchesBlocked = filterBlocked ? (t.depType && t.depType !== "") : true;
+                    // Esta es la nueva línea que filtra por la fecha del calendario
+                    const matchesDate = dateFilter ? (t.end === dateFilter) : true;
+                    
+                    return matchesStatus && matchesSearch && matchesBlocked && matchesDate;
+                });
+                
+                const currentSort = columnSorts[col];
+                const sortLabel = currentSort === 'date' ? 'Fecha' : (currentSort === 'prio' ? 'Prioridad' : '');
+                
+                document.getElementById('h-'+col).innerHTML = `
+                    <div class="col-title-box">${colNames[col]} ${sortLabel ? `<span class="sort-indicator">${sortLabel}</span>` : ''}</div>
+                    <button class="btn-sort ${currentSort !== 'none' ? 'active' : ''}" onclick="cycleSort('${col}')"><i class="fas fa-sort-amount-down"></i></button>
+                `;
+
+                if(currentSort === 'date') list.sort((a, b) => (!a.end ? 1 : (!b.end ? -1 : new Date(a.end) - new Date(b.end))));
+                else if(currentSort === 'prio') list.sort((a, b) => (prioValue[b.priority] || 0) - (prioValue[a.priority] || 0));
+
+                document.getElementById('l-'+col).innerHTML = list.map(t => {
+                    const pColor = prioColors[t.priority] || 'var(--p-media)';
+                    const isBlocked = t.depType && t.depType !== "";
+                    return `
+                    <div class="card card-${t.status}" draggable="true" ondragstart="drag(event, ${t.id})" onclick="openTaskModal(${t.id})">
+                        <i class="fas fa-trash btn-delete-task" onclick="event.stopPropagation(); deleteTask(${t.id})"></i>
+                        <div class="card-title"><span class="priority-dot" style="background:${pColor}"></span> ${t.title} ${isBlocked ? `<i class="fas fa-lock" style="color:var(--danger); font-size:0.7rem;"></i>` : ''}</div>
+                        ${t.desc ? `<div class="card-desc">${t.desc}</div>` : ''}
+                        <div class="card-info">
+                            <span><b>Resp:</b> ${t.user}</span>
+                            ${isBlocked ? `<span style="color:var(--danger); font-weight:bold; font-size:0.65rem">BLOQUEO: ${t.depType}</span>` : ''}
+                            ${t.fileName ? `<span style="font-size:0.65rem; color:var(--primary)"><i class="fas fa-paperclip"></i> ${t.fileName}</span>` : ''}
+                            ${t.status !== 'done' ? getSLA(t.end) : '<span class="days-label" style="background:#E3FCEF; color:#006644">Hecho</span>'}
+                        </div>
+                        <div style="display:flex; justify-content:flex-end; gap:5px; margin-top:10px">
+                             <button class="btn" style="padding:2px 8px; font-size:0.6rem; background:#eee" onclick="event.stopPropagation(); move(${t.id},'prev')">←</button>
+                             <button class="btn btn-primary" style="padding:2px 8px; font-size:0.6rem" onclick="event.stopPropagation(); move(${t.id},'next')">→</button>
+                        </div>
+                    </div>`;
+                }).join('');
+            });
+            updateKPIs();
+updateAdminUI();
+        }
+
+        function exportBackup() {
+            const dataStr = JSON.stringify(db, null, 2);
+            const blob = new Blob([dataStr], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url; link.download = `backup_beregu_${new Date().toISOString().split('T')[0]}.json`; link.click();
+        }
+
+        function importBackup(event) {
+            const file = event.target.files[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedDb = JSON.parse(e.target.result);
+                    if (confirm("¿Sobrescribir datos actuales?")) { db = importedDb; sync(); }
+                } catch (err) { alert("Error al leer archivo."); }
+            };
+            reader.readAsText(file);
+        }
+
+        async function exportPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('l', 'mm', 'a4'); // Horizontal para mayor detalle
+            const now = new Date().toLocaleString();
+            
+            // Título Principal
+            doc.setFontSize(22);
+            doc.setTextColor(7, 71, 166);
+            doc.text("REPORTE MAESTRO DE TAREAS - BEREGU", 14, 18);
+            
+            // Fecha y Subtítulo
+            doc.setFontSize(10);
+            doc.setTextColor(100);
+            doc.text(`Fecha del Reporte: ${now}`, 14, 25);
+
+            // Preparar datos para la tabla
+            const body = db.tasks.map(t => {
+                const statusMap = { todo: 'PENDIENTE', doing: 'EN CURSO', rev: 'REVISIÓN', done: 'FINALIZADO' };
+                const notes = t.history ? t.history.map(h => `${h.date}: ${h.text}`).join('\n') : '-';
+                const bloqueos = t.depType ? `SI (${t.depType})` : 'No';
+                
+                return [
+                    t.title,
+                    t.user,
+                    (t.priority || 'media').toUpperCase(),
+                    statusMap[t.status],
+                    t.end || 'S/D',
+                    bloqueos,
+                    t.desc || '',
+                    notes
+                ];
+            });
+
+            // Generar tabla autoTable
+            doc.autoTable({
+                startY: 32,
+                head: [['Título de Tarea', 'Responsable', 'Prior.', 'Estado', 'Vence', 'Bloqueo', 'Descripción Detallada', 'Historial de Notas']],
+                body: body,
+                theme: 'striped',
+                headStyles: { fillColor: [7, 71, 166], textColor: 255, fontSize: 9, fontStyle: 'bold' },
+                styles: { fontSize: 8, cellPadding: 3, overflow: 'linebreak' },
+                columnStyles: {
+                    0: { cellWidth: 40 }, // Título
+                    1: { cellWidth: 25 }, // Responsable
+                    2: { cellWidth: 15 }, // Prioridad
+                    3: { cellWidth: 22 }, // Estado
+                    4: { cellWidth: 20 }, // Vencimiento
+                    5: { cellWidth: 25 }, // Bloqueo
+                    6: { cellWidth: 50 }, // Descripción
+                    7: { cellWidth: 'auto' } // Notas ocupa el resto
+                },
+                alternateRowStyles: { fillColor: [245, 247, 250] },
+                margin: { top: 30, left: 14, right: 14 }
+            });
+
+            const totalPages = doc.internal.getNumberOfPages();
+            for(let i = 1; i <= totalPages; i++) {
+                doc.setPage(i);
+                doc.setFontSize(8);
+                doc.text(`Página ${i} de ${totalPages} - Equipo 3`, 270, 200, { align: 'right' });
+            }
+
+            doc.save(`Reporte_Detallado_Beregu_${new Date().toISOString().split('T')[0]}.pdf`);
+        }
+
+        function getSLA(end) {
+            if(!end) return "";
+            const today = new Date(); today.setHours(0,0,0,0);
+            const due = new Date(end); due.setHours(0,0,0,0);
+            const diff = Math.ceil((due - today) / (1000 * 60 * 60 * 24));
+            let html = `<span><b>Plazo:</b> ${end}</span>`;
+            if(diff < 0) html += `<span class="days-label" style="background:#FFEBE6; color:#BF2600">Vencida (${Math.abs(diff)}d)</span>`;
+            else if(diff === 0) html += `<span class="days-label" style="background:var(--danger); color:white; animation: blink-red 1.5s infinite">¡Vence Hoy!</span>`;
+            else if(diff === 1) html += `<span class="days-label" style="background:#FFF0B3; color:#172B4D">Falta 1 día</span>`;
+            else html += `<span class="days-label" style="background:#E3FCEF; color:#172B4D">Faltan ${diff} días</span>`;
+            return html;
+        }
+
+        function openTaskModal(taskId = null) {
+    // 1. Limpiamos los campos de texto
+    document.getElementById('t-title').value = "";
+    document.getElementById('t-desc').value = "";
+    document.getElementById('t-end').value = "";
+    
+    // 2. RELLENAR RESPONSABLE (El que faltaba)
+    const userSelect = document.getElementById('t-user');
+    if (userSelect) {
+        userSelect.innerHTML = db.users.map(u => `<option value="${u}">${u}</option>`).join('');
+    }
+
+    // 3. RELLENAR EQUIPO EXTERNO
+    const depSelect = document.getElementById('t-dep-team');
+    if (depSelect) {
+        depSelect.innerHTML = '<option value="">Ninguno</option>' + 
+            db.depTypes.map(d => `<option value="${d}">${d}</option>`).join('');
+    }
+
+    // 4. RELLENAR A LA ESPERA DE...
+    const depTaskSelect = document.getElementById('t-dep-task');
+    if (depTaskSelect) {
+        const otrasTareas = db.tasks.filter(t => t.id != taskId);
+        depTaskSelect.innerHTML = '<option value="">Sin dependencia</option>' + 
+            otrasTareas.map(t => `<option value="${t.id}">${t.title}</option>`).join('');
+    }
+
+    // 5. CARGAR DATOS SI ES EDICIÓN
+    if (taskId) {
+        const task = db.tasks.find(t => t.id == taskId);
+        if (task) {
+            document.getElementById('t-title').value = task.title;
+            document.getElementById('t-desc').value = task.desc || "";
+            document.getElementById('t-end').value = task.end || "";
+            
+            // Asignamos los valores a los 3 desplegables
+            if (userSelect) userSelect.value = task.user || "";
+            if (depSelect) depSelect.value = task.depTeam || "";
+            if (depTaskSelect) depTaskSelect.value = task.depTask || "";
+            
+            currentEditingTaskId = taskId;
+        }
+    } else {
+        currentEditingTaskId = null;
+    }
+
+    document.getElementById('taskModal').style.display = 'flex';
+}
+
+        function addComment() {
+            const input = document.getElementById('t-new-comment'); if(!input.value || !curId) return;
+            const t = db.tasks.find(x => x.id == curId); if(!t.history) t.history = [];
+            t.history.push({ date: new Date().toLocaleDateString(), text: input.value });
+            input.value = ""; openTaskModal(curId);
+        }
+
+        function saveTask() {
+    const title = document.getElementById('t-title').value;
+    if (!title) {
+        alert("El título es obligatorio");
+        return;
+    }
+
+    const existing = curId ? db.tasks.find(x => x.id == curId) : null;
+    const fileInput = document.getElementById('t-file');
+    
+    // Obtenemos la fecha de hoy en formato YYYY-MM-DD
+    const today = new Date().toISOString().split('T')[0];
+
+    const task = { 
+        id: curId || Date.now(), 
+        title: title, 
+        desc: document.getElementById('t-desc').value, 
+        end: document.getElementById('t-end').value, 
+depTeam: document.getElementById('t-dep-team').value,
+    depTask: document.getElementById('t-dep-task').value,
+        
+        // Lógica de fecha de creación:
+        // Si la tarea existe, mantiene su 'created'. Si es nueva, le pone 'today'.
+        created: existing ? (existing.created || today) : today,
+        
+        user: document.getElementById('t-user').value, 
+        priority: document.getElementById('t-priority').value,
+        depId: document.getElementById('t-dep-task').value, 
+        depType: document.getElementById('t-dep-team').value,
+        status: existing ? existing.status : 'todo', 
+        history: existing ? (existing.history || []) : [],
+        fileName: fileInput.files[0] ? fileInput.files[0].name : (existing ? existing.fileName : null)
+    };
+
+    // Actualizar el array de tareas
+    if (curId) {
+        db.tasks = db.tasks.map(t => t.id == curId ? task : t);
+    } else {
+        db.tasks.push(task);
+    }
+
+    sync();   // Guarda en LocalStorage
+    render(); // Refresca el tablero (Esta es la función que dibuja las tareas)
+    
+    // Cerramos el modal
+    closeModals(); 
+    
+    // Mostramos confirmación
+    showToast("Tarea guardada con éxito");
+}
+
+        function toggleSidebar() { document.getElementById('sidebar').classList.toggle('hidden'); }
+        function move(id, dir) { const t = db.tasks.find(x => x.id == id); const flow = ['todo', 'doing', 'rev', 'done']; let idx = flow.indexOf(t.status); if(dir==='next' && idx < 3) t.status = flow[idx+1]; if(dir==='prev' && idx > 0) t.status = flow[idx-1]; sync(); }
+        function deleteTask(id) {
+    const taskIndex = db.tasks.findIndex(t => t.id == id);
+    if (taskIndex > -1) {
+        const task = db.tasks.splice(taskIndex, 1)[0];
+        if (!db.trash) db.trash = [];
+        db.trash.push(task); // Enviar a la papelera
+        sync();
+showToast("Tarea movida a la papelera", "warning"); // <--- AÑADIR ESTO
+        alert("Tarea enviada a la papelera");
+    }
+}
+        function closeModals() { document.querySelectorAll('.modal').forEach(m => m.style.display='none'); }
+        function changeMonth(dir) { calDate.setMonth(calDate.getMonth() + dir); renderCalendar(); }
+
+        function renderCalendar() {
+            const year = calDate.getFullYear(); const month = calDate.getMonth();
+            const daysInMonth = new Date(year, month + 1, 0).getDate(); const firstDay = new Date(year, month, 1).getDay();
+            document.getElementById('calMonth').innerText = `${new Intl.DateTimeFormat('es-ES', { month: 'long' }).format(calDate)} ${year}`;
+            let html = ['L','M','X','J','V','S','D'].map(d => `<div class="cal-day-name">${d}</div>`).join('');
+            let offset = firstDay === 0 ? 6 : firstDay - 1;
+            for (let i = 0; i < offset; i++) html += '<div></div>';
+            for (let d = 1; d <= daysInMonth; d++) {
+                const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                const hasTask = db.tasks.some(t => t.end === dateStr);
+                const isToday = new Date().toISOString().split('T')[0] === dateStr;
+                const isSelected = dateFilter === dateStr;
+                
+                let className = 'cal-day';
+                if (isToday) className += ' cal-today';
+                if (hasTask) className += ' cal-has-task';
+                if (isSelected) className += ' cal-selected-day';
+                
+                // Aquí añadimos el evento onclick para que filtre al hacer clic
+                html += `<div class="${className}" onclick="filterByDate(${d}, ${month}, ${year})">${d}</div>`;
+            }
+            document.getElementById('calGrid').innerHTML = html;
+        }
+
+        function updateKPIs() {
+            const c = { todo: db.tasks.filter(t=>t.status==='todo').length, doing: db.tasks.filter(t=>t.status==='doing').length, rev: db.tasks.filter(t=>t.status==='rev').length, done: db.tasks.filter(t=>t.status==='done').length, blocked: db.tasks.filter(t=>t.depType && t.depType !== "").length };
+            document.getElementById('k-todo').innerText = c.todo; document.getElementById('k-doing').innerText = c.doing; document.getElementById('k-rev').innerText = c.rev; document.getElementById('k-done').innerText = c.done; document.getElementById('k-blocked').innerText = c.blocked;
+            const ctx = document.getElementById('mainChart').getContext('2d');
+            if(chart) chart.destroy();
+            chart = new Chart(ctx, { type: 'radar', data: { labels: ['Pend.', 'Curso', 'Rev.', 'Fin.'], datasets: [{ data: [c.todo, c.doing, c.rev, c.done], backgroundColor: 'rgba(0, 82, 204, 0.2)', borderColor: '#0052CC', borderWidth: 2 }] }, options: { scales: { r: { min: 0, ticks: { display: false } } }, plugins: { legend: { display: false } } } });
+        }
+
+        function openDataModal() { document.getElementById('dataModal').style.display='flex'; renderAdmin(); }
+        function renderAdmin() {
+            document.getElementById('admin-user-list').innerHTML = db.users.map((u,i)=>`<div class="admin-row" style="display:flex; justify-content:space-between; margin-bottom:5px;"><input style="border:none; background:transparent; width:80%" value="${u}" onblur="db.users[${i}]=this.value;sync()"><i class="fas fa-trash" style="cursor:pointer; color:#de350b" onclick="db.users.splice(${i},1);sync();renderAdmin()"></i></div>`).join('');
+            document.getElementById('admin-dep-list').innerHTML = db.depTypes.map((d,i)=>`<div class="admin-row" style="display:flex; justify-content:space-between; margin-bottom:5px;"><input style="border:none; background:transparent; width:80%" value="${d}" onblur="db.depTypes[${i}]=this.value;sync()"><i class="fas fa-trash" style="cursor:pointer; color:#de350b" onclick="db.depTypes.splice(${i},1);sync();renderAdmin()"></i></div>`).join('');
+        }
+        function addUser() { const v = document.getElementById('new-u').value; if(v){db.users.push(v); sync(); renderAdmin(); document.getElementById('new-u').value=""}}
+        function addDepType() { const v = document.getElementById('new-d').value; if(v){db.depTypes.push(v); sync(); renderAdmin(); document.getElementById('new-d').value=""}}
+        
+        render();
+// --- FUNCIONES DE AJUSTES Y PERFIL ---
+function toggleSettings() {
+    document.getElementById('settingsDropdown').classList.toggle('active');
+}
+
+// Cerrar menú si se hace clic fuera del perfil
+window.addEventListener('click', function(event) {
+    if (!event.target.closest('.user-profile')) {
+        const dropdown = document.getElementById('settingsDropdown');
+        if (dropdown) dropdown.classList.remove('active');
+    }
+});
+
+function openAdminSettings() {
+    const nuevoNombre = prompt("Introduce el nombre del Administrador:", db.adminName);
+    if (nuevoNombre && nuevoNombre.trim() !== "") {
+        db.adminName = nuevoNombre;
+        updateAdminUI();
+        sync(); // Esto guarda el nombre en el localStorage
+    }
+}
+
+function updateAdminUI() {
+    const nameDisplay = document.getElementById('admin-name-display');
+    const avatarDiv = document.getElemen1768464128328tById('user-avatar');
+    const initialsSpan = document.getElementById('avatar-initials');
+
+    if (!nameDisplay || !avatarDiv) return;
+
+    nameDisplay.innerText = db.adminName;
+
+    // Aquí está el cambio clave: ahora pregunta si hay foto en la base de datos
+    if (db.adminPhoto) {
+        // Si hay foto, la pone de fondo y oculta las letras
+        avatarDiv.style.backgroundImage = `url(${db.adminPhoto})`;
+        initialsSpan.style.display = 'none';
+    } else {
+        // Si no hay foto, vuelve al sistema de iniciales
+        avatarDiv.style.backgroundImage = 'none';
+        initialsSpan.style.display = 'block';
+        const iniciales = db.adminName.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+        initialsSpan.innerText = iniciales;
+    }
+}
+// Función para bloquear la aplicación
+function lockApp() {
+    document.getElementById('lock-screen').style.display = 'flex';
+    document.getElementById('lock-pass').value = ''; // Limpia el input
+    document.getElementById('lock-pass').focus();
+    // Guardamos en el navegador que la app está bloqueada
+    localStorage.setItem('app_locked', 'true');
+}
+
+// Función para desbloquear
+function unlockApp() {
+    const pass = document.getElementById('lock-pass').value;
+    if (pass === "0000") {
+        document.getElementById('lock-screen').style.display = 'none';
+        localStorage.setItem('app_locked', 'false');
+    } else {
+        alert("Contraseña incorrecta");
+        document.getElementById('lock-pass').value = '';
+    }
+}
+// Permite desbloquear pulsando la tecla Enter
+document.getElementById('lock-pass').addEventListener('keypress', function (e) {
+    if (e.key === 'Enter') {
+        unlockApp();
+    }
+});
+
+// Comprobación de seguridad al cargar la página
+function checkLockStatus() {
+    if (localStorage.getItem('app_locked') === 'true') {
+        document.getElementById('lock-screen').style.display = 'flex';
+    }
+}    
+// ... funciones anteriores de lockApp, unlockApp, etc ...
+
+// Paso 5: Comprobación de seguridad al cargar la página
+checkLockStatus();
+
+// Esta línea ya debería existir en tu código, es la que arranca la app
+render(); 
+// Función de Borrado Total con Doble Confirmación
+function dangerDeleteAll() {
+    // Primera confirmación
+    const firstConfirm = confirm("⚠️ ATENCIÓN: Estás a punto de borrar TODAS las tareas, usuarios y configuraciones. Esta acción no se puede deshacer.\n\n¿Deseas continuar?");
+    
+    if (firstConfirm) {
+        // Segunda confirmación manual
+        const secondConfirm = confirm("❓ ¿ESTÁS COMPLETAMENTE SEGURO?\n\nPulsa 'Aceptar' para borrarlo todo o 'Cancelar' para mantener tus datos a salvo.");
+        
+        if (secondConfirm) {
+            // Borrado definitivo
+            localStorage.removeItem('beregu_apex_v9'); // Borra la DB
+            localStorage.removeItem('app_locked');      // Por si acaso, quita el bloqueo
+            alert("Todos los datos han sido eliminados correctamente.");
+            location.reload(); // Reinicia la app limpia
+        } else {
+            alert("Acción cancelada. Tus datos están a salvo.");
+        }
+    } else {
+        // El usuario pulsó cancelar en la primera ventana
+        console.log("Borrado cancelado por el usuario.");
+    }
+}
+function openTrashModal() {
+    const list = document.getElementById('trash-list');
+    list.innerHTML = "";
+    if (!db.trash || db.trash.length === 0) {
+        list.innerHTML = '<div class="empty-trash">La papelera está vacía</div>';
+    } else {
+        db.trash.forEach((t, index) => {
+            list.innerHTML += `
+                <div class="trash-item">
+                    <div class="trash-info">
+                        <strong>${t.title}</strong>
+                        <span style="font-size:0.7rem; color:#6B778C;">Originalmente en: ${t.status}</span>
+                    </div>
+                    <div class="trash-actions">
+                        <i class="fas fa-undo-alt btn-restore" title="Restaurar" onclick="restoreTask(${index})"></i>
+                        <i class="fas fa-times-circle btn-purge" title="Eliminar permanentemente" onclick="permanentDelete(${index})"></i>
+                    </div>
+                </div>`;
+        });
+    }
+    document.getElementById('trashModal').style.display = 'flex';
+}
+
+function restoreTask(index) {
+    const task = db.trash.splice(index, 1)[0];
+    db.tasks.push(task);
+    sync();
+    openTrashModal();
+}
+
+function permanentDelete(index) {
+    if (confirm("¿Eliminar permanentemente? Esta acción no se puede deshacer.")) {
+        db.trash.splice(index, 1);
+        sync();
+        openTrashModal();
+    }
+}
+
+function emptyTrash() {
+    if (confirm("¿Vaciar toda la papelera?")) {
+        db.trash = [];
+        sync();
+        openTrashModal();
+    }
+}
+// --- FUNCION PARA GENERAR Y ABRIR LA LÍNEA DE TIEMPO ---
+function openTimelineModal() {
+    // 1. Localizamos los elementos donde vamos a escribir
+    const modal = document.getElementById('timelineModal');
+    const container = document.getElementById('timeline-content');
+    
+    // Si no existen en el HTML, cancelamos para evitar errores
+    if (!modal || !container) return;
+
+    // 2. Limpiamos el contenedor para que no se dupliquen las tareas al abrir y cerrar
+    container.innerHTML = "";
+
+    // 3. Filtramos tareas que tengan fecha y las ordenamos de la más próxima a la más lejana
+    const tasksWithDate = db.tasks
+        .filter(t => t.end && t.end !== "")
+        .sort((a, b) => new Date(a.end) - new Date(b.end));
+
+    // 4. Si la lista está vacía, mostramos mensaje de aviso
+    if (tasksWithDate.length === 0) {
+        container.innerHTML = '<div style="text-align:center; padding:40px; color:#6B778C;">No hay tareas con fecha de vencimiento configurada.</div>';
+    } else {
+        // 5. Generamos el HTML para cada tarea
+        tasksWithDate.forEach(t => {
+            // Colores de prioridad para las barras
+            const colors = { critica: '#EB5A46', alta: '#FF8B00', media: '#36B37E', baja: '#4C9AFF' };
+            const taskColor = colors[t.priority] || '#0052CC';
+            
+            // LLAMADA AL PASO 2: Calculamos los días que faltan
+            const timeLeft = getDaysRemaining(t.end);
+            
+            // Construimos la fila de la línea de tiempo
+            container.innerHTML += `
+                <div class="timeline-row" style="display: flex; align-items: center; background: white; padding: 12px; border-radius: 8px; margin-bottom: 10px; border-left: 5px solid ${taskColor}; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                    
+                    <div class="timeline-date-label" style="min-width: 100px; text-align: center;">
+                        <div style="font-weight: bold; font-size: 0.85rem;">${t.end}</div>
+                        <div class="days-left-tag ${timeLeft.class}">${timeLeft.text}</div>
+                    </div>
+
+                    <div class="timeline-task-info" style="flex: 1; margin-left: 20px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 5px;">
+                            <span style="font-weight:700; font-size:0.9rem; color: #172b4d;">${t.title}</span>
+                            <span style="font-size:0.7rem; color:#6B778C; background:#f4f5f7; padding:2px 8px; border-radius:10px;">${t.user}</span>
+                        </div>
+                        <div class="timeline-bar-bg" style="height: 6px; background: #eee; border-radius: 3px; overflow: hidden;">
+                            <div class="timeline-bar-fill" style="width: 100%; height: 100%; background: ${taskColor}"></div>
+                        </div>
+                    </div>
+
+                </div>`;
+        });
+    }
+
+    // 6. Finalmente, mostramos el modal y nos aseguramos de cerrar el menú de ajustes
+    modal.style.display = 'flex';
+    const dropdown = document.getElementById('settingsDropdown');
+    if (dropdown) dropdown.classList.remove('active');
+}
+// Cerrar el modal de línea de tiempo si se hace clic fuera de la caja blanca
+window.addEventListener('click', function(event) {
+    const timelineModal = document.getElementById('timelineModal');
+    if (event.target == timelineModal) {
+        timelineModal.style.display = "none";
+    }
+});
+// Activa el selector de archivos al pulsar el avatar
+function triggerAvatarUpload() {
+    document.getElementById('avatar-input').click();
+}
+
+// Procesa la imagen y la guarda en la base de datos
+function uploadAvatar(input) {
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            db.adminPhoto = e.target.result; // Guardamos la imagen en Base64
+            updateAdminUI();
+            sync();
+        };
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+
+// Modificamos la función updateAdminUI para que soporte la foto
+function updateAdminUI() {
+    const nameDisplay = document.getElementById('admin-name-display');
+    const avatarDiv = document.getElementById('user-avatar');
+    const initialsSpan = document.getElementById('avatar-initials');
+
+    if (!nameDisplay || !avatarDiv) return;
+
+    nameDisplay.innerText = db.adminName;
+
+    if (db.adminPhoto) {
+        // Si hay foto, la ponemos de fondo y quitamos las iniciales
+        avatarDiv.style.backgroundImage = `url(${db.adminPhoto})`;
+        initialsSpan.style.display = 'none';
+    } else {
+        // Si no hay foto, ponemos iniciales y fondo de color
+        avatarDiv.style.backgroundImage = 'none';
+        initialsSpan.style.display = 'block';
+        const iniciales = db.adminName.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+        initialsSpan.innerText = iniciales;
+    }
+}
+function getDaysRemaining(endDate) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Limpiamos horas para comparar solo días
+    const target = new Date(endDate);
+    
+    const diffInMs = target - today;
+    const diffInDays = Math.ceil(diffInMs / (1000 * 60 * 60 * 24));
+    
+    if (diffInDays < 0) return { text: "Vencida", class: "days-late" };
+    if (diffInDays === 0) return { text: "¡Vence hoy!", class: "days-urgent" };
+    if (diffInDays <= 3) return { text: `Faltan ${diffInDays} d`, class: "days-urgent" };
+    return { text: `Faltan ${diffInDays} d`, class: "days-normal" };
+}
+function openHelpModal() {
+    document.getElementById('helpModal').style.display = 'flex';
+}
+window.addEventListener('click', function(event) {
+    const helpModal = document.getElementById('helpModal');
+    if (event.target == helpModal) {
+        helpModal.style.display = "none";
+    }
+});
+/**
+ * Muestra una notificación elegante en la esquina superior.
+ * @param {string} message - El texto a mostrar.
+ * @param {string} type - 'success' (verde), 'warning' (naranja), 'danger' (rojo).
+ */
+function showToast(message, type = 'success') {
+    const container = document.getElementById('toast-container');
+    
+    // 1. Creamos el elemento del mensaje
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`; // Esto le da el color según el CSS del Paso 1
+    
+    // 2. Elegimos el icono según el tipo de mensaje
+    let icon = 'fa-check-circle'; // Por defecto verde/éxito
+    if (type === 'warning') icon = 'fa-exclamation-triangle'; // Naranja/advertencia
+    if (type === 'danger') icon = 'fa-trash-alt'; // Rojo/peligro
+
+// 3.1. AÑADES ESTA LÍNEA JUSTO AQUÍ (LA CIRUGÍA):
+card.setAttribute('data-user', t.user || t.usuario || 'Sin asignar');
+
+    // 3. Insertamos el contenido
+    toast.innerHTML = `
+        <i class="fas ${icon}"></i>
+        <span style="margin-left: 10px;">${message}</span>
+    `;
+
+    // 4. Lo añadimos al contenedor
+    container.appendChild(toast);
+
+    // 5. Programamos su desaparición (3 segundos de vida)
+    setTimeout(() => {
+        toast.classList.add('fade-out'); // Inicia la animación de desvanecimiento
+        // Esperamos a que termine la animación de CSS (500ms) para eliminarlo del código
+        setTimeout(() => {
+            if (toast.parentNode) {
+                container.removeChild(toast);
+            }
+        }, 500);
+    }, 3000);
+}
+let currentUserFilter = 'all'; // Variable para saber quién está seleccionado
+
+function renderUserFilters() {
+    const container = document.getElementById('user-filters-list');
+    if (!container) return;
+
+    // Obtenemos los usuarios de tu db. Si no hay, lista vacía
+    const users = (typeof db !== 'undefined' && db.users) ? db.users : [];
+
+    let html = `<button class="user-filter-btn ${currentUserFilter === 'all' ? 'active' : ''}" 
+                onclick="filterByUser('all')">Todos</button>`;
+
+    users.forEach(u => {
+        const name = u.trim();
+        const activeClass = currentUserFilter === name ? 'active' : '';
+        html += `<button class="user-filter-btn ${activeClass}" onclick="filterByUser('${name}')">
+                 <i class="fas fa-user"></i> ${name}</button>`;
+    });
+
+    container.innerHTML = html;
+}
+function filterByUser(userName) {
+    currentUserFilter = userName;
+    
+    // 1. Actualizamos visualmente qué botón está activo
+    renderUserFilters();
+
+    // 2. Buscamos todas las tarjetas (en tu CSS usas la clase .card)
+    const allCards = document.querySelectorAll('.card');
+
+    allCards.forEach(card => {
+        // Obtenemos el texto de la tarjeta
+        const cardText = card.innerText || card.textContent;
+        
+        // Comprobamos si el nombre del usuario está escrito en la tarjeta
+        const coincide = userName === 'all' || cardText.toLowerCase().includes(userName.toLowerCase());
+
+        if (coincide) {
+            card.style.display = "block"; // Se muestra
+            card.style.opacity = "1";
+        } else {
+            card.style.display = "none";  // Se oculta
+        }
+    });
+
+    showToast(userName === 'all' ? "Mostrando todo" : `Viendo tareas de ${userName}`);
+
+}
+// Forzamos el renderizado de los filtros al cargar la página
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+        renderUserFilters();
+    }, 500); // Le damos medio segundo para asegurar que db.users existe
+});
+// Cuando la ventana cargue totalmente
+window.onload = function() {
+updateProjectTitleUI();    
+renderUserFilters(); // Dibuja los botones de usuario
+    // Si tienes una función para dibujar el calendario o tablero, llámalas aquí también
+};
+// --- LÓGICA PARA EL TÍTULO PERSONALIZABLE ---
+
+// 1. Función para mostrar el nombre en la interfaz (se llama al cargar la página)
+function updateProjectTitleUI() {
+    const titleContainer = document.getElementById('project-name-content');
+    if (titleContainer && db.projectName) {
+        titleContainer.innerHTML = db.projectName;
+    }
+}
+
+// 2. Función que se activa al hacer clic en el título
+function editProjectName() {
+    // Obtenemos el texto actual sin el HTML para que sea fácil de editar
+    const currentNameClean = document.getElementById('project-name-content').innerText;
+    
+    const newName = prompt("Introduce el nuevo nombre del proyecto o equipo:", currentNameClean);
+    
+    if (newName !== null && newName.trim() !== "") {
+        // Guardamos el nuevo nombre en la base de datos
+        // Usamos la Opción A: Mantiene el "Eq3.:" en rojo automáticamente
+        db.projectName = `<span style="color: #eb2027;">Eq3.:</span> ${newName.replace('Eq3.:', '').trim()}`;
+
+        sync(); // Esta función ya la tienes, guarda en LocalStorage y refresca
+        updateProjectTitleUI(); // Actualiza el texto visualmente
+        showToast("Nombre del proyecto actualizado");
+    }
+}
+</script>
+</body>
+</html>
