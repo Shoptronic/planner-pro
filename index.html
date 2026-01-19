@@ -321,8 +321,32 @@
     transition: opacity 0.3s ease;
 }
 </style>
+<style>
+    .workload-floating {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: white;
+        padding: 5px 15px;
+        border-radius: 20px;
+        border: 1px solid #ddd;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        position: absolute; 
+        top: 25px;
+        right: 400px; 
+        z-index: 10;
+        font-family: sans-serif;
+    }
+    .status-text {
+        font-size: 11px;
+        font-weight: bold;
+        text-transform: uppercase;
+        margin-right: 5px;
+    }
+</style>
 </head>
 <body>
+<div class="workload-floating" id="workload-list"></div>
 <div id="lock-screen">
     <div class="lock-box">
         <i class="fas fa-lock"></i>
@@ -703,6 +727,7 @@ function resetDateFilter() {
             });
             updateKPIs();
 updateAdminUI();
+updateWorkloadBadge();
         }
 
         function exportBackup() {
@@ -1346,6 +1371,7 @@ updateProjectTitleUI();
 renderUserFilters(); // Dibuja los botones de usuario
     // Si tienes una función para dibujar el calendario o tablero, llámalas aquí también
 };
+
 // --- LÓGICA PARA EL TÍTULO PERSONALIZABLE ---
 
 // 1. Función para mostrar el nombre en la interfaz (se llama al cargar la página)
@@ -1355,7 +1381,61 @@ function updateProjectTitleUI() {
         titleContainer.innerHTML = db.projectName;
     }
 }
+// --- FUNCIÓN DE CARGA DE TRABAJO (PASO 3) ---
+function updateWorkloadBadge() {
+    const container = document.getElementById('workload-list');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    const openTasks = db.tasks.filter(t => t.status !== 'done');
+    const totalOpen = openTasks.length;
+    
+    // --- Lógica del Semáforo ---
+    let statusLabel = "Aceptable";
+    let statusColor = "#36B37E"; // Verde
+    
+    if (totalOpen > 10) {
+        statusLabel = "Excesiva";
+        statusColor = "#de350b"; // Rojo
+    } else if (totalOpen > 5) {
+        statusLabel = "Moderada";
+        statusColor = "#FFAB00"; // Amarillo/Naranja
+    }
 
+    // Insertar el texto del semáforo
+    container.innerHTML = `
+        <span class="status-text" style="color: ${statusColor}">
+            Carga ${statusLabel} (${totalOpen})
+        </span>
+        <div id="user-badges" style="display: flex; gap: 4px; border-left: 1px solid #eee; padding-left: 10px;"></div>
+    `;
+
+    const badgesContainer = document.getElementById('user-badges');
+    
+    // Dibujar los círculos de los usuarios
+    db.users.forEach(u => {
+        const userName = typeof u === 'object' ? u.name : u;
+        const count = openTasks.filter(t => t.user === userName).length;
+        
+        if (count > 0) {
+            const badge = document.createElement('div');
+            badge.style = `
+                width: 20px; height: 20px; border-radius: 50%;
+                background: var(--primary); color: white; font-size: 10px; 
+                font-weight: bold; display: flex; align-items: center; 
+                justify-content: center; cursor: help; position: relative;
+                border: 1px solid white;
+            `;
+            badge.title = `${userName}: ${count} tareas`;
+            badge.innerHTML = userName.substring(0,1).toUpperCase();
+            
+            // Mini burbuja con el número individual
+            badge.innerHTML += `<span style="position:absolute; top:-5px; right:-5px; background:#172B4D; color:white; border-radius:50%; width:12px; height:12px; font-size:8px; display:flex; align-items:center; justify-content:center; border:1px solid white;">${count}</span>`;
+            
+            badgesContainer.appendChild(badge);
+        }
+    });
+}
 // 2. Función que se activa al hacer clic en el título
 function editProjectName() {
     // Obtenemos el texto actual sin el HTML para que sea fácil de editar
